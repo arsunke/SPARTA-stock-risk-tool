@@ -88,29 +88,39 @@ if st.button("Analyze"):
         start_date = end_date - timedelta(days=2 * 365)
 
         data = {}
+        invalid_tickers = []  # Track invalid tickers
         for ticker in tickers:
             stock_data = yf.download(ticker, start=start_date, end=end_date)
+            if stock_data.empty:  # Check if data is empty
+                invalid_tickers.append(ticker)
+                continue
             data[ticker] = stock_data['Adj Close']
 
-        df = pd.DataFrame(data)
-        df.fillna(method='ffill', inplace=True)
-        df.dropna(inplace=True)
+        if invalid_tickers:
+            st.warning(f"The following tickers are invalid or have no data: {', '.join(invalid_tickers)}")
 
-        daily_returns = df.pct_change().dropna()
-        sp500_data = yf.download('^GSPC', start=start_date, end=end_date)['Adj Close']
-        market_returns = sp500_data.pct_change().dropna()
+        if not data:  # If all tickers are invalid, stop execution
+            st.error("No valid tickers to analyze.")
+        else:
+            df = pd.DataFrame(data)
+            df.fillna(method='ffill', inplace=True)
+            df.dropna(inplace=True)
 
-        # Risk assessment
-        risk_assessment = {}
-        for ticker in tickers:
-            var = calculate_var(daily_returns[ticker]) * 100
-            beta = calculate_beta(daily_returns[ticker], market_returns)
-            risk_level, score = assign_risk_level(var, beta)
-            risk_assessment[ticker] = {"level": risk_level, "score": score}
+            daily_returns = df.pct_change().dropna()
+            sp500_data = yf.download('^GSPC', start=start_date, end=end_date)['Adj Close']
+            market_returns = sp500_data.pct_change().dropna()
 
-        # Store results in session state
-        st.session_state.risk_assessment = risk_assessment
-        st.session_state.tickers = tickers
+            # Risk assessment
+            risk_assessment = {}
+            for ticker in data.keys():  # Only iterate over valid tickers
+                var = calculate_var(daily_returns[ticker]) * 100
+                beta = calculate_beta(daily_returns[ticker], market_returns)
+                risk_level, score = assign_risk_level(var, beta)
+                risk_assessment[ticker] = {"level": risk_level, "score": score}
+
+            # Store results in session state
+            st.session_state.risk_assessment = risk_assessment
+            st.session_state.tickers = list(data.keys())
 
 # Ensure risk assessment persists after sorting
 if st.session_state.risk_assessment:
@@ -145,8 +155,8 @@ if st.session_state.risk_assessment:
         st.markdown(
             f"""
             <p style='font-size:20px;'>
-            <span style='color:#4CAF50;'><b>{ticker}</b></span> 
-            <span style='color:#4CAF50;'>-</span> 
+            <span style='color:#FFFFFF;'><b>{ticker}</b></span> 
+            <span style='color:#FFFFFF;'>-</span> 
             <span style='color:{risk_color};'>{risk_level}</span>
             </p>
             """,
